@@ -1,5 +1,63 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 
+:root {
+    --color-primary: #fff;
+}
+
 body {
     font-family: "Poppins", sans-serif;
+}
+
+.nav-tabs > li > a {
+    font-weight: 600;
+}
+
+.control-label {
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+#x-selectized, #y-selectized {
+    color: var(--color-primary);
+}
+/* hover */
+.btn-file:hover {
+    border: 1px solid #6f6f6f;
+    transition: 0.5s;
+}
+/* ===== */
+
+.form-control {
+    text-align: center;
+    color: #e74c3c;
+    overflow: hidden;
+}
+
+.selectize-control.single .selectize-input:not(.no-arrow):after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 50%;
+    right: calc(.75rem + 5px);
+    margin-top: -3px;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 5px 0 5px;
+    border-color: var(--color-primary) transparent transparent transparent;
+}
+
+/* selectized X,Y variable */
+.selectize-dropdown .active:not(.selected) {
+    background: #6f6f6f;
+    color: var(--color-primary);
+}
+
+.selectize-control.multi .selectize-input > div {
+    background: #6f6f6f;
+    color: var(--color-primary);
+}
+
+.selectize-input {
+    color: var(--color-primary);
 }

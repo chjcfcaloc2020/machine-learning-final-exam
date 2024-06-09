@@ -20,8 +20,12 @@ css_file = Path(__file__).parent / "css" / "styles.css"
 app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.input_file("csv", "Choose csv file:", accept=[".csv"], multiple=False),
-        ui.input_selectize("x", "X variables", choices=[], multiple=True),
-        ui.input_selectize("y", "Y variable", choices=[], multiple=False),
+        ui.input_selectize("x", "X variables", choices=[], multiple=True, options=(
+            { "placeholder": "Enter the X variables", }
+        )),
+        ui.input_selectize("y", "Y variable", choices=[], multiple=False , options=(
+            { "placeholder": "Enter the Y variable", }
+        )),
         ui.hr(),
         ui.input_radio_buttons(
             "models", 
