@@ -1,4 +1,5 @@
 from shiny import App, ui, reactive, render
+from shinyswatch import theme
 from shiny.types import FileInfo
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,9 +9,13 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
+from pathlib import Path
 import threading
 import numpy as np
 import itertools
+
+#call css file
+css_file = Path(__file__).parent / "css" / "styles.css"
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
@@ -33,7 +38,9 @@ app_ui = ui.page_sidebar(
         ui.nav_panel("Plot", ui.output_plot("plot")),
         ui.nav_panel("Accuracy & Equation", ui.output_text("accuracy")),
         ui.nav_panel("Confusion Matrix", ui.output_plot("confusion_matrix"))
-    )
+    ),
+    ui.include_css(css_file),
+    theme.darkly()
 )
 
 def process_data(df):
