@@ -13,6 +13,16 @@ from pathlib import Path
 import threading
 import numpy as np
 import itertools
+import io
+import htmltools
+
+custom_css = """
+<style>
+.testt > thead > tr{
+    text-align: left;
+}
+</style>
+"""
 
 #call css file
 css_file = Path(__file__).parent / "css" / "styles.css"
@@ -38,13 +48,23 @@ app_ui = ui.page_sidebar(
             }
         ),
     ),  
-    ui.navset_tab(
+    ui.navset_card_pill(
+        ui.nav_panel("Preview", 
+            ui.output_text("error_text"),
+            ui.output_text("data_preview"),
+            ui.output_table("data_preview_tbl", class_="testt"),
+            ui.output_text("describe"),
+            ui.output_table("describe_tbl"),
+            ui.output_text("data_missing"),
+            ui.output_table("missing_tbl"),
+        ),
         ui.nav_panel("Plot", ui.output_plot("plot")),
         ui.nav_panel("Accuracy & Equation", ui.output_text("accuracy")),
         ui.nav_panel("Confusion Matrix", ui.output_plot("confusion_matrix"))
     ),
     ui.include_css(css_file),
-    theme.darkly()
+    theme.darkly(),
+    htmltools.tags.head(htmltools.tags.style(custom_css)),
 )
 
 def process_data(df):
@@ -74,6 +94,7 @@ def display_equation(model):
         equation = "Equation not available"
     return equation
 
+# SERVER
 def server(input, output, session):
     @reactive.calc
     def parsed_file():
@@ -90,6 +111,64 @@ def server(input, output, session):
         
         return df
     
+    # preview navbar
+    @render.text
+    def error_text():
+        if input.csv() is None:
+            return "No data loaded. Please chose csv file!"
+        else:
+            return ""
+        
+    @render.text
+    def data_preview():
+        if input.csv() is None:
+            return ""
+        else:
+            return "Data Preview"
+
+    @render.table
+    def data_preview_tbl():
+        df = parsed_file()
+        if df is None:
+            return pd.DataFrame()
+        else:
+            return df.head()
+
+    @render.text
+    def describe():
+        df = parsed_file()
+        if input.csv() is None:
+            return ""
+        else:
+            return "Data Describe"
+      
+    @render.table
+    def describe_tbl():
+        df = parsed_file()
+        if input.csv() is None:
+            return pd.DataFrame()
+        else:
+            return df.describe()
+
+    @render.text
+    def data_missing():
+        df = parsed_file()
+        if input.csv() is None:
+            return ""
+        else:
+            return "Missing Values"
+
+    @render.table
+    def missing_tbl():
+        df = parsed_file()
+        if input.csv() is None:
+            return pd.DataFrame()
+        else:
+            missing_values = df.isnull().sum().reset_index()
+            missing_values.columns = ['Column', 'Missing Values']
+            return missing_values
+
+    # plot navbar
     @render.plot
     def plot():
         df = parsed_file()
@@ -128,11 +207,12 @@ def server(input, output, session):
         plt.legend()
         plt.tight_layout()
 
+    # accuracy navbar
     @render.text
     def accuracy():
         df = parsed_file()
         if df.empty:
-            return "No data loaded"
+            return "No data loaded. Please chose csv file!"
         
         x_columns = input.x()
         y_column = input.y()
@@ -150,12 +230,13 @@ def server(input, output, session):
         
         if model:
             return None
-
+        
+    # confusion_matrix navbar
     @render.plot
     def confusion_matrix():
         df = parsed_file()
         if df.empty:
-            return "No data loaded"
+            return "No data loaded. Please chose csv file!"
         
         x_columns = input.x()
         y_column = input.y()

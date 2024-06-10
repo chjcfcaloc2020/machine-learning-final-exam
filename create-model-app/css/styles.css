@@ -61,3 +61,18 @@ body {
 .selectize-input {
     color: var(--color-primary);
 }
+
+.tab-content {
+    padding-top: 18px;
+}
+
+#error_text, #accuracy {
+    text-align: center;
+    color: #e74c3c;
+    font-size: 18px;
+}
+
+#data_preview, #describe, #data_missing {
+    font-weight: 700;
+    font-size: 1.6rem;
+}
