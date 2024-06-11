@@ -1,0 +1,3 @@
+    def __len__(self):
+        """Return the number of estimators in the ensemble."""
+        return len(self.estimator_params)

@@ -1,0 +1,7 @@
+shiny
+shinyswatch
+pandas
+matplotlib
+scikit-learn
+Jinja2
+scikit-surprise

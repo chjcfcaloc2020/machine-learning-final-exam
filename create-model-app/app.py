@@ -9,15 +9,14 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
+from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 import threading
 import numpy as np
 import itertools
-import io
 
-#call css file
+# Call css file
 css_file = Path(__file__).parent / "css" / "styles.css"
 
 app_ui = ui.page_sidebar(
@@ -39,6 +38,7 @@ app_ui = ui.page_sidebar(
                 "knn": "KNN Regression",
                 "tree": "Decision Trees",
                 "forest": "Random Forest",
+                "recommendation": "Recommendation"
             }
         ),
     ),  
@@ -79,9 +79,9 @@ def calculate_metrics(model, X, y):
     return mse
 
 def display_equation(model):
-    if hasattr(model, "coef_"):  # Kiểm tra xem mô hình có thuộc tính coef_ không (dành cho hồi quy tuyến tính)
+    if hasattr(model, "coef_"):  # Check if the model has a coef_ attribute (for linear regression)
         equation = "Coefficients: {}\nIntercept: {}".format(model.coef_, model.intercept_)
-    elif hasattr(model, "feature_importances_"):  # Kiểm tra xem mô hình có thuộc tính feature_importances_ không (dành cho cây quyết định)
+    elif hasattr(model, "feature_importances_"):  # Check if the model has a feature_importances_ attribute (for decision trees)
         equation = "Feature Importances: {}".format(model.feature_importances_)
     else:
         equation = "Equation not available"
@@ -183,7 +183,9 @@ def server(input, output, session):
             elif model_name == "tree":
                 model = DecisionTreeRegressor()
             elif model_name == "forest":
-                model = RandomForestRegressor(criterion="squared_error", random_state=0, n_estimators=40)
+                model = RandomForestRegressor(random_state=0, n_estimators=40)
+            elif model_name == "recommendation":
+                return 
             
             if model:
                 model_thread = threading.Thread(target=train_model, args=(model, df[[x_column]], df[y_column], output))
@@ -223,10 +225,24 @@ def server(input, output, session):
             model = KNeighborsRegressor()
         elif model_name == "tree":
             model = DecisionTreeRegressor()
-        
+        elif model_name == "forest":
+            model = RandomForestRegressor(random_state=0, n_estimators=40)
+        elif model_name == "recommendation":
+            return "No accuracy metric available for recommendation model"  # Placeholder
+
         if model:
-            return None
-        
+            X_train, X_test, y_train, y_test = train_test_split(df[x_columns], df[y_column], test_size=0.3, random_state=0)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            if model_name == "logistic":
+                accuracy = accuracy_score(y_test, y_pred)
+                return f"Accuracy: {accuracy}"
+            else:
+                mse = mean_squared_error(y_test, y_pred)
+                equation = display_equation(model)
+                return f"Mean Squared Error: {mse}\n{equation}"
+
     # confusion_matrix navbar
     @render.plot
     def confusion_matrix():
@@ -239,17 +255,31 @@ def server(input, output, session):
         model_name = input.models()
         model = None
         
-        if model_name == "linear":
-            model = LinearRegression()
-        elif model_name == "logistic":
+        if model_name == "logistic":
             model = LogisticRegression()
-        elif model_name == "knn":
-            model = KNeighborsRegressor()
-        elif model_name == "tree":
-            model = DecisionTreeRegressor()
         elif model_name == "forest":
-            model = RandomForestClassifier(n_estimators=10, criterion="entropy")
+            model = RandomForestRegressor(n_estimators=10)
+        elif model_name == "recommendation":
+            return "No confusion matrix available for recommendation model"  # Placeholder
         
         if model:
-            return None    
+            X_train, X_test, y_train, y_test = train_test_split(df[x_columns], df[y_column], test_size=0.3, random_state=0)
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            cm = confusion_matrix(y_test, y_pred)
+            
+            plt.figure(figsize=(10,7))
+            plt.title(f'Confusion Matrix: {model_name.capitalize()}')
+            plt.imshow(cm, cmap=plt.cm.Blues)
+            plt.xlabel('Predicted')
+            plt.ylabel('Actual')
+            plt.colorbar()
+            plt.xticks(np.arange(len(set(y_test))), set(y_test))
+            plt.yticks(np.arange(len(set(y_test))), set(y_test))
+            
+            thresh = cm.max() / 2.
+            for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+                plt.text(j, i, cm[i, j], horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+            plt.tight_layout()
+
 app = App(app_ui, server)
