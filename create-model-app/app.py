@@ -7,22 +7,15 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix
+from sklearn.model_selection import train_test_split
 from pathlib import Path
 import threading
 import numpy as np
 import itertools
 import io
-import htmltools
-
-custom_css = """
-<style>
-.testt > thead > tr{
-    text-align: left;
-}
-</style>
-"""
 
 #call css file
 css_file = Path(__file__).parent / "css" / "styles.css"
@@ -45,6 +38,7 @@ app_ui = ui.page_sidebar(
                 "logistic": "Logistic Regression",
                 "knn": "KNN Regression",
                 "tree": "Decision Trees",
+                "forest": "Random Forest",
             }
         ),
     ),  
@@ -52,7 +46,7 @@ app_ui = ui.page_sidebar(
         ui.nav_panel("Preview", 
             ui.output_text("error_text"),
             ui.output_text("data_preview"),
-            ui.output_table("data_preview_tbl", class_="testt"),
+            ui.output_table("data_preview_tbl"),
             ui.output_text("describe"),
             ui.output_table("describe_tbl"),
             ui.output_text("data_missing"),
@@ -64,7 +58,6 @@ app_ui = ui.page_sidebar(
     ),
     ui.include_css(css_file),
     theme.darkly(),
-    htmltools.tags.head(htmltools.tags.style(custom_css)),
 )
 
 def process_data(df):
@@ -180,6 +173,7 @@ def server(input, output, session):
         model_name = input.models()
 
         for x_column in x_columns:
+            model = None
             if model_name == "linear":
                 model = LinearRegression()
             elif model_name == "logistic":
@@ -188,6 +182,8 @@ def server(input, output, session):
                 model = KNeighborsRegressor()
             elif model_name == "tree":
                 model = DecisionTreeRegressor()
+            elif model_name == "forest":
+                model = RandomForestRegressor(criterion="squared_error", random_state=0, n_estimators=40)
             
             if model:
                 model_thread = threading.Thread(target=train_model, args=(model, df[[x_column]], df[y_column], output))
@@ -218,7 +214,7 @@ def server(input, output, session):
         y_column = input.y()
         model_name = input.models()
         model = None
-        
+
         if model_name == "linear":
             model = LinearRegression()
         elif model_name == "logistic":
@@ -251,7 +247,9 @@ def server(input, output, session):
             model = KNeighborsRegressor()
         elif model_name == "tree":
             model = DecisionTreeRegressor()
+        elif model_name == "forest":
+            model = RandomForestClassifier(n_estimators=10, criterion="entropy")
         
         if model:
-            return None
+            return None    
 app = App(app_ui, server)
