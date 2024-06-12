@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import accuracy_score, confusion_matrix, mean_squared_error
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 import threading
@@ -70,7 +70,7 @@ def process_data(df):
 
 def display_equation(model):
     if hasattr(model, "coef_"):  # Check if the model has a coef_ attribute (for linear regression)
-        equation = "Coefficients: {}\nIntercept: {}".format(model.coef_, model.intercept_)
+        equation = "Coefficients: {} \n Intercept: {}".format(model.coef_, model.intercept_)
     elif hasattr(model, "feature_importances_"):  # Check if the model has a feature_importances_ attribute (for decision trees)
         equation = "Feature Importances: {}".format(model.feature_importances_)
     else:
@@ -239,12 +239,18 @@ def server(input, output, session):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             
-            # Convert predictions to binary outcomes for accuracy calculation
-            y_pred = np.round(y_pred).astype(int)
-            
-            accuracy = accuracy_score(y_test, y_pred)
-            equation = display_equation(model)
-            return f"Accuracy: {accuracy} \n {equation}"
+            if model_name == "logistic":
+                accuracy = accuracy_score(y_test, y_pred)
+                equation = display_equation(model)
+                return f"Accuracy: {accuracy}\n{equation}"
+            else:
+                # Chuyển đổi y_test và y_pred thành các lớp rời rạc để tính accuracy
+                y_test_discrete = np.round(y_test)
+                y_pred_discrete = np.round(y_pred)
+                accuracy = accuracy_score(y_test_discrete, y_pred_discrete)
+                mse = mean_squared_error(y_test, y_pred)
+                equation = display_equation(model)
+                return f"Accuracy: {accuracy} \n Mean Squared Error: {mse}\n\n{equation}"
 
     # confusion_matrix navbar
     @render.plot
