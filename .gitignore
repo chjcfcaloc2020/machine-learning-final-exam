@@ -1,2 +1,5 @@
 
 create-model-app/__pycache__
+/books.csv
+/users.csv
+/ratings.csv

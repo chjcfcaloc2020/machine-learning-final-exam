@@ -12,6 +12,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, confusion_matrix, mean_squared_error
 from sklearn.model_selection import train_test_split
 from pathlib import Path
+from scipy.sparse.linalg import svds
 import threading
 import numpy as np
 
@@ -52,7 +53,15 @@ app_ui = ui.page_sidebar(
         ),
         ui.nav_panel("Plot", ui.output_plot("plot")),
         ui.nav_panel("Accuracy & Equation", ui.output_text("accuracy")),
-        ui.nav_panel("Confusion Matrix", ui.output_plot("confusion_matrix"))
+        ui.nav_panel("Confusion Matrix", ui.output_plot("confusion_matrix")),
+        ui.nav_panel("Recommendation Books", 
+            ui.row(
+                ui.column(4, ui.input_file("books", "Choose books csv file:", accept=[".csv"], multiple=False)),
+                ui.column(4, ui.input_file("users", "Choose users csv file:", accept=[".csv"], multiple=False)),
+                ui.column(4, ui.input_file("ratings", "Choose ratings csv file:", accept=[".csv"], multiple=False)),
+            ),
+            ui.output_table("recommendations"),
+        )
     ),
     ui.include_css(css_file),
     theme.darkly(),
@@ -93,6 +102,48 @@ def server(input, output, session):
         ui.update_selectize("y", choices=numeric_cols)
         
         return df
+    
+    @reactive.calc
+    def load_books_csv():
+        file: list[FileInfo] | None = input.books()
+        if file is None:
+            return pd.DataFrame()
+        
+        books = pd.read_csv(file[0]["datapath"], sep=";", on_bad_lines='skip', low_memory=False, encoding="latin-1")
+        books.columns = ['ISBN', 'bookTitle', 'bookAuthor', 'yearOfPublication', 'publisher', 'imageUrlS', 'imageUrlM', 'imageUrlL']
+        
+        books.drop(['imageUrlS', 'imageUrlM', 'imageUrlL'], axis=1, inplace=True)
+        books = books[(books.yearOfPublication != 'DK Publishing Inc') & (books.yearOfPublication != 'Gallimard')]
+        books.yearOfPublication = books.yearOfPublication.astype('int32')
+        books = books.dropna(subset=['publisher'])
+        
+        return books
+    
+    @reactive.calc
+    def load_users_csv():
+        file: list[FileInfo] | None = input.users()
+        if file is None:
+            return pd.DataFrame()
+        
+        users = pd.read_csv(file[0]["datapath"], sep=";", on_bad_lines='skip', low_memory=False, encoding="latin-1")
+        users.columns = ['userID', 'Location', 'Age']
+
+        users.loc[(users.Age > 90) | (users.Age < 5), 'Age'] = np.nan
+        users.Age = users.Age.fillna(users.Age.mean())
+        users.Age = users.Age.astype(np.int32)
+
+        return users
+    
+    @reactive.calc
+    def load_ratings_csv():
+        file: list[FileInfo] | None = input.ratings()
+        if file is None:
+            return pd.DataFrame()
+        
+        ratings = pd.read_csv(file[0]["datapath"], sep=";", on_bad_lines='skip', low_memory=False, encoding="latin-1")
+        ratings.columns = ['userID', 'ISBN', 'bookRating']
+
+        return ratings
     
     # preview navbar
     @render.text
@@ -301,5 +352,48 @@ def server(input, output, session):
             plt.ylabel('True label')
             plt.xlabel('Predicted label')
             plt.tight_layout()
+
+    @render.table
+    def recommendations():
+        books_df = load_books_csv()
+        users_df = load_users_csv()
+        ratings_df = load_ratings_csv()
+
+        if books_df.empty or users_df.empty or ratings_df.empty:
+            return pd.DataFrame()
+        
+        n_users = users_df.shape[0]
+        n_books = books_df.shape[0]
+
+        ratings_new = ratings_df[ratings_df.ISBN.isin(books_df.ISBN)]
+        ratings_explicit = ratings_new[ratings_new.bookRating != 0]
+        ratings_implicit = ratings_new[ratings_new.bookRating == 0]
+
+        counts1 = ratings_explicit['userID'].value_counts()
+        ratings_explicit = ratings_explicit[ratings_explicit['userID'].isin(counts1[counts1 >= 100].index)]
+
+        ratings_matrix = ratings_explicit.pivot(index='userID', columns='ISBN', values='bookRating').fillna(0)
+        userID = ratings_matrix.index
+        ISBN = ratings_matrix.columns
+
+        U, sigma, Vt = svds(ratings_matrix.to_numpy(), k=50)
+        sigma = np.diag(sigma)
+        all_user_predicted_ratings = np.dot(np.dot(U, sigma), Vt) 
+        preds_df = pd.DataFrame(all_user_predicted_ratings, columns=ratings_matrix.columns)
+
+        user_id = 2
+        userID = ratings_matrix.iloc[user_id-1, :].name
+
+        sorted_user_predictions = preds_df.iloc[user_id].sort_values(ascending=False)
+
+        user_data = ratings_explicit[ratings_explicit.userID == (userID)]
+        book_data = books_df[books_df.ISBN.isin(user_data.ISBN)]
+        user_full_info = user_data.merge(book_data)
+
+        recommendations = (books_df[~books_df['ISBN'].isin(user_full_info['ISBN'])].
+                   merge(pd.DataFrame(sorted_user_predictions).reset_index(), how = 'left', left_on = 'ISBN'
+                         ,right_on = 'ISBN')).rename(columns = {user_id: 'Predictions'})
+        
+        return recommendations.sort_values('Predictions', ascending = False).iloc[:10, :]
 
 app = App(app_ui, server)
