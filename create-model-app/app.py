@@ -9,12 +9,11 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix, r2_score
+from sklearn.metrics import accuracy_score, confusion_matrix
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 import threading
 import numpy as np
-import itertools
 
 # Call css file
 css_file = Path(__file__).parent / "css" / "styles.css"
@@ -68,14 +67,6 @@ def process_data(df):
     numeric_cols = df.select_dtypes(include=["float64", "int64"]).columns
     df[numeric_cols] = StandardScaler().fit_transform(df[numeric_cols])
     return df
-
-def train_model(model, X, y, output):
-    model.fit(X, y)
-
-def calculate_metrics(model, X, y):
-    y_pred = model.predict(X)
-    mse = mean_squared_error(y, y_pred)
-    return mse
 
 def display_equation(model):
     if hasattr(model, "coef_"):  # Check if the model has a coef_ attribute (for linear regression)
@@ -191,7 +182,7 @@ def server(input, output, session):
                 model = RandomForestRegressor(random_state=0, n_estimators=40)
                 
             if model:
-                model_thread = threading.Thread(target=train_model, args=(model, df[[x_column]], df[y_column], output))
+                model_thread = threading.Thread(target=model.fit, args=(df[[x_column]], df[y_column]))
                 model_thread.start()
                 model_thread.join()
                 
@@ -208,7 +199,7 @@ def server(input, output, session):
         plt.legend()
         plt.tight_layout()
 
-    # accuracy navbar@render.text
+    # accuracy navbar
     @render.text
     def accuracy():
         df = parsed_file()
@@ -248,21 +239,12 @@ def server(input, output, session):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             
-            if model_name == "logistic":
-                accuracy = accuracy_score(y_test, y_pred)
-                equation = display_equation(model)
-                return f"Accuracy: {accuracy}\n{equation}"
-            else:
-                r_squared = r2_score(y_test, y_pred)
-                mse = mean_squared_error(y_test, y_pred)
-                if hasattr(model, "coef_"):
-                    equation = "Coefficients: {}\nIntercept: {}".format(model.coef_, model.intercept_)
-                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}\n{equation}"
-                elif hasattr(model, "feature_importances_"):
-                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}\nFeature Importances: {model.feature_importances_}"
-                else:
-                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}"
-
+            # Convert predictions to binary outcomes for accuracy calculation
+            y_pred = np.round(y_pred).astype(int)
+            
+            accuracy = accuracy_score(y_test, y_pred)
+            equation = display_equation(model)
+            return f"Accuracy: {accuracy} \n {equation}"
 
     # confusion_matrix navbar
     @render.plot
@@ -298,69 +280,20 @@ def server(input, output, session):
             X_train, X_test, y_train, y_test = train_test_split(df[list(x_columns)], df[y_column], test_size=0.3, random_state=0)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
+            
+            # Convert predictions to binary outcomes for confusion matrix
+            y_pred = np.round(y_pred).astype(int)
+            
             cm = confusion_matrix(y_test, y_pred)
+            
             plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-            plt.title("Confusion Matrix")
+            plt.title('Confusion Matrix')
             plt.colorbar()
             tick_marks = np.arange(len(set(y_test)))
-            plt.xticks(tick_marks, set(y_test), rotation=45)
-            plt.yticks(tick_marks, set(y_test))
+            plt.xticks(tick_marks, tick_marks)
+            plt.yticks(tick_marks, tick_marks)
             plt.ylabel('True label')
             plt.xlabel('Predicted label')
             plt.tight_layout()
-    
-    # recommendation navbar
-    @render.table
-    def recommendation_tbl():
-        df = parsed_file()
-        if df.empty:
-            return pd.DataFrame()
-
-        x_columns = input.x()
-        y_column = input.y()
-
-        # Validation
-        if not x_columns or not y_column:
-            return pd.DataFrame({"Error": ["Please select both X and Y variables."]})
-        if not all(col in df.columns for col in x_columns) or y_column not in df.columns:
-            return pd.DataFrame({"Error": ["Selected columns are not in the DataFrame."]})
-
-        recommendations = []
-
-        for model_name in ["linear", "logistic", "knn", "tree", "forest"]:
-            model = None
-            if model_name == "linear":
-                model = LinearRegression()
-            elif model_name == "logistic":
-                model = LogisticRegression()
-            elif model_name == "knn":
-                model = KNeighborsRegressor()
-            elif model_name == "tree":
-                model = DecisionTreeRegressor()
-            elif model_name == "forest":
-                model = RandomForestRegressor(random_state=0, n_estimators=40)
-
-            if model:
-                X_train, X_test, y_train, y_test = train_test_split(df[list(x_columns)], df[y_column], test_size=0.3, random_state=0)
-                model.fit(X_train, y_train)
-                y_pred = model.predict(X_test)
-                mse = mean_squared_error(y_test, y_pred)
-                equation = display_equation(model)
-                recommendations.append({"Model": model_name.capitalize(), "MSE": mse, "Equation": equation})
-
-        return pd.DataFrame(recommendations)
-    
-    # Register the other functions
-    output.error_text = error_text
-    output.data_preview = data_preview
-    output.data_preview_tbl = data_preview_tbl
-    output.describe = describe
-    output.describe_tbl = describe_tbl
-    output.data_missing = data_missing
-    output.missing_tbl = missing_tbl
-    output.plot = plot
-    output.accuracy = accuracy
-    output.confusion_matrix = confusion_matrix
-    output.recommendation_tbl = recommendation_tbl
 
 app = App(app_ui, server)
