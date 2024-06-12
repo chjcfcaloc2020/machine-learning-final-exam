@@ -7,9 +7,9 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_squared_error, accuracy_score
+from sklearn.metrics import mean_squared_error, accuracy_score, confusion_matrix, r2_score
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 import threading
@@ -23,10 +23,10 @@ app_ui = ui.page_sidebar(
     ui.sidebar(
         ui.input_file("csv", "Choose csv file:", accept=[".csv"], multiple=False),
         ui.input_selectize("x", "X variables", choices=[], multiple=True, options=(
-            { "placeholder": "Enter the X variables", }
+            {"placeholder": "Enter the X variables",}
         )),
         ui.input_selectize("y", "Y variable", choices=[], multiple=False , options=(
-            { "placeholder": "Enter the Y variable", }
+            {"placeholder": "Enter the Y variable",}
         )),
         ui.hr(),
         ui.input_radio_buttons(
@@ -38,7 +38,6 @@ app_ui = ui.page_sidebar(
                 "knn": "KNN Regression",
                 "tree": "Decision Trees",
                 "forest": "Random Forest",
-                "recommendation": "Recommendation"
             }
         ),
     ),  
@@ -108,7 +107,7 @@ def server(input, output, session):
     @render.text
     def error_text():
         if input.csv() is None:
-            return "No data loaded. Please chose csv file!"
+            return "No data loaded. Please choose a CSV file!"
         else:
             return ""
         
@@ -160,7 +159,7 @@ def server(input, output, session):
             missing_values = df.isnull().sum().reset_index()
             missing_values.columns = ['Column', 'Missing Values']
             return missing_values
-
+    
     # plot navbar
     @render.plot
     def plot():
@@ -171,6 +170,12 @@ def server(input, output, session):
         x_columns = input.x()
         y_column = input.y()
         model_name = input.models()
+
+        # Validation
+        if not x_columns or not y_column:
+            return
+        if not all(col in df.columns for col in x_columns) or y_column not in df.columns:
+            return
 
         for x_column in x_columns:
             model = None
@@ -184,9 +189,7 @@ def server(input, output, session):
                 model = DecisionTreeRegressor()
             elif model_name == "forest":
                 model = RandomForestRegressor(random_state=0, n_estimators=40)
-            elif model_name == "recommendation":
-                return 
-            
+                
             if model:
                 model_thread = threading.Thread(target=train_model, args=(model, df[[x_column]], df[y_column], output))
                 model_thread.start()
@@ -205,16 +208,28 @@ def server(input, output, session):
         plt.legend()
         plt.tight_layout()
 
-    # accuracy navbar
+    # accuracy navbar@render.text
     @render.text
     def accuracy():
         df = parsed_file()
         if df.empty:
-            return "No data loaded. Please chose csv file!"
+            return "No data loaded. Please choose a CSV file!"
         
         x_columns = input.x()
         y_column = input.y()
         model_name = input.models()
+        
+        # Debug prints
+        print(f"x_columns: {x_columns}")
+        print(f"y_column: {y_column}")
+        print(f"model_name: {model_name}")
+
+        # Validation
+        if not x_columns or not y_column:
+            return "Please select both X and Y variables."
+        if not all(col in df.columns for col in x_columns) or y_column not in df.columns:
+            return "Selected columns are not in the DataFrame."
+
         model = None
 
         if model_name == "linear":
@@ -227,59 +242,125 @@ def server(input, output, session):
             model = DecisionTreeRegressor()
         elif model_name == "forest":
             model = RandomForestRegressor(random_state=0, n_estimators=40)
-        elif model_name == "recommendation":
-            return "No accuracy metric available for recommendation model"  # Placeholder
 
         if model:
-            X_train, X_test, y_train, y_test = train_test_split(df[x_columns], df[y_column], test_size=0.3, random_state=0)
+            X_train, X_test, y_train, y_test = train_test_split(df[list(x_columns)], df[y_column], test_size=0.3, random_state=0)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             
             if model_name == "logistic":
                 accuracy = accuracy_score(y_test, y_pred)
-                return f"Accuracy: {accuracy}"
-            else:
-                mse = mean_squared_error(y_test, y_pred)
                 equation = display_equation(model)
-                return f"Mean Squared Error: {mse}\n{equation}"
+                return f"Accuracy: {accuracy}\n{equation}"
+            else:
+                r_squared = r2_score(y_test, y_pred)
+                mse = mean_squared_error(y_test, y_pred)
+                if hasattr(model, "coef_"):
+                    equation = "Coefficients: {}\nIntercept: {}".format(model.coef_, model.intercept_)
+                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}\n{equation}"
+                elif hasattr(model, "feature_importances_"):
+                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}\nFeature Importances: {model.feature_importances_}"
+                else:
+                    return f"R-squared: {r_squared}\nMean Squared Error: {mse}"
+
 
     # confusion_matrix navbar
     @render.plot
     def confusion_matrix():
         df = parsed_file()
         if df.empty:
-            return "No data loaded. Please chose csv file!"
+            return
         
         x_columns = input.x()
         y_column = input.y()
         model_name = input.models()
+        
+        # Validation
+        if not x_columns or not y_column:
+            return
+        if not all(col in df.columns for col in x_columns) or y_column not in df.columns:
+            return
+        
         model = None
         
-        if model_name == "logistic":
+        if model_name == "linear":
+            return "Confusion matrix is not applicable for linear regression"
+        elif model_name == "logistic":
             model = LogisticRegression()
+        elif model_name == "knn":
+            model = KNeighborsRegressor()
+        elif model_name == "tree":
+            model = DecisionTreeRegressor()
         elif model_name == "forest":
-            model = RandomForestRegressor(n_estimators=10)
-        elif model_name == "recommendation":
-            return "No confusion matrix available for recommendation model"  # Placeholder
+            model = RandomForestRegressor(random_state=0, n_estimators=40)
         
         if model:
-            X_train, X_test, y_train, y_test = train_test_split(df[x_columns], df[y_column], test_size=0.3, random_state=0)
+            X_train, X_test, y_train, y_test = train_test_split(df[list(x_columns)], df[y_column], test_size=0.3, random_state=0)
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             cm = confusion_matrix(y_test, y_pred)
-            
-            plt.figure(figsize=(10,7))
-            plt.title(f'Confusion Matrix: {model_name.capitalize()}')
-            plt.imshow(cm, cmap=plt.cm.Blues)
-            plt.xlabel('Predicted')
-            plt.ylabel('Actual')
+            plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+            plt.title("Confusion Matrix")
             plt.colorbar()
-            plt.xticks(np.arange(len(set(y_test))), set(y_test))
-            plt.yticks(np.arange(len(set(y_test))), set(y_test))
-            
-            thresh = cm.max() / 2.
-            for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-                plt.text(j, i, cm[i, j], horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+            tick_marks = np.arange(len(set(y_test)))
+            plt.xticks(tick_marks, set(y_test), rotation=45)
+            plt.yticks(tick_marks, set(y_test))
+            plt.ylabel('True label')
+            plt.xlabel('Predicted label')
             plt.tight_layout()
+    
+    # recommendation navbar
+    @render.table
+    def recommendation_tbl():
+        df = parsed_file()
+        if df.empty:
+            return pd.DataFrame()
+
+        x_columns = input.x()
+        y_column = input.y()
+
+        # Validation
+        if not x_columns or not y_column:
+            return pd.DataFrame({"Error": ["Please select both X and Y variables."]})
+        if not all(col in df.columns for col in x_columns) or y_column not in df.columns:
+            return pd.DataFrame({"Error": ["Selected columns are not in the DataFrame."]})
+
+        recommendations = []
+
+        for model_name in ["linear", "logistic", "knn", "tree", "forest"]:
+            model = None
+            if model_name == "linear":
+                model = LinearRegression()
+            elif model_name == "logistic":
+                model = LogisticRegression()
+            elif model_name == "knn":
+                model = KNeighborsRegressor()
+            elif model_name == "tree":
+                model = DecisionTreeRegressor()
+            elif model_name == "forest":
+                model = RandomForestRegressor(random_state=0, n_estimators=40)
+
+            if model:
+                X_train, X_test, y_train, y_test = train_test_split(df[list(x_columns)], df[y_column], test_size=0.3, random_state=0)
+                model.fit(X_train, y_train)
+                y_pred = model.predict(X_test)
+                mse = mean_squared_error(y_test, y_pred)
+                equation = display_equation(model)
+                recommendations.append({"Model": model_name.capitalize(), "MSE": mse, "Equation": equation})
+
+        return pd.DataFrame(recommendations)
+    
+    # Register the other functions
+    output.error_text = error_text
+    output.data_preview = data_preview
+    output.data_preview_tbl = data_preview_tbl
+    output.describe = describe
+    output.describe_tbl = describe_tbl
+    output.data_missing = data_missing
+    output.missing_tbl = missing_tbl
+    output.plot = plot
+    output.accuracy = accuracy
+    output.confusion_matrix = confusion_matrix
+    output.recommendation_tbl = recommendation_tbl
 
 app = App(app_ui, server)
