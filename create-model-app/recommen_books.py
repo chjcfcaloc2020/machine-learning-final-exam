@@ -32,11 +32,12 @@ ratings_implicit = ratings_new[ratings_new.bookRating == 0]
 # Collaborative Filtering Based Recommendation Systems
 counts1 = ratings_explicit['userID'].value_counts()
 ratings_explicit = ratings_explicit[ratings_explicit['userID'].isin(counts1[counts1 >= 100].index)]
-print(counts1)
+
 # Generate matrix table from explicit ratings table
 ratings_matrix = ratings_explicit.pivot(index='userID', columns='ISBN', values='bookRating').fillna(0)
 userID = ratings_matrix.index
 ISBN = ratings_matrix.columns
+# print(userID)
 
 U, sigma, Vt = svds(ratings_matrix.to_numpy(), k=50)
 sigma = np.diag(sigma)
@@ -44,7 +45,7 @@ all_user_predicted_ratings = np.dot(np.dot(U, sigma), Vt)
 preds_df = pd.DataFrame(all_user_predicted_ratings, columns=ratings_matrix.columns)
 
 # Take a particular user_id
-user_id = 2
+user_id = 1
 userID = ratings_matrix.iloc[user_id-1, :].name
 
 sorted_user_predictions = preds_df.iloc[user_id].sort_values(ascending=False)
@@ -55,7 +56,7 @@ book_data = books[books.ISBN.isin(user_data.ISBN)]
 
 # Merge
 user_full_info = user_data.merge(book_data)
-# print('User {0} has already rated {1} books.'.format(userID, user_full_info.shape[0]))
+print('User {0} has already rated {1} books.'.format(userID, user_full_info.shape[0]))
 
 recommendations = (books[~books['ISBN'].isin(user_full_info['ISBN'])].
                    merge(pd.DataFrame(sorted_user_predictions).reset_index(), how = 'left', left_on = 'ISBN'
